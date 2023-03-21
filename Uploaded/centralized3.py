@@ -51,8 +51,10 @@ def initialize(num_inputs,num_classes,num_hidden):
     params = {
         "W1": np.random.randn(num_hidden, num_inputs) * np.sqrt(1. / num_inputs),
         "b1": np.zeros((num_hidden, 1)) * np.sqrt(1. / num_inputs),
-        "W2": np.random.randn(num_classes, num_hidden) * np.sqrt(1. / num_hidden),
-        "b2": np.zeros((num_classes, 1)) * np.sqrt(1. / num_hidden)
+        "W2": np.random.randn(num_hidden, num_hidden) * np.sqrt(1. / num_hidden),
+        "b2": np.zeros((num_hidden, 1)) * np.sqrt(1. / num_hidden),
+        "W3": np.random.randn(num_classes, num_hidden) * np.sqrt(1. / num_hidden),
+        "b3": np.zeros((num_classes, 1)) * np.sqrt(1. / num_hidden)
     }
     return params
 
@@ -93,6 +95,7 @@ def compute_loss(Y, Y_hat):
     Compute cross entropy loss
     """
     E = oneHotEncode(Y)
+    # print(Y.shape, Y_hat.shape)
     L_sum = np.sum(np.multiply(E, np.log(Y_hat)))
     m = Y.shape[0]
     L = (-1*L_sum)/m 
@@ -121,8 +124,14 @@ def feed_forward(X, params):
     # Z2 = W2.dot(A1) + b2
     cache["Z2"] = np.matmul(params["W2"], cache["A1"]) + params["b2"]
 
-    # A2 = softmax(Z2)
-    cache["A2"] = np.exp(cache["Z2"]) / np.sum(np.exp(cache["Z2"]), axis=0)
+    # A2 = ReLU(Z2)
+    cache["A2"] = ReLU(cache["Z2"])
+
+    # Z3 = W3.dot(A2) + b3
+    cache["Z3"] = np.matmul(params["W3"], cache["A2"]) + params["b3"]
+
+    # A3 = softmax(Z3)
+    cache["A3"] = np.exp(cache["Z3"]) / np.sum(np.exp(cache["Z3"]), axis=0)
 
     return cache
 
@@ -140,7 +149,17 @@ def back_propagate(X, Y, params, cache, m_batch):
     """
     # error at last layer
     E = oneHotEncode(Y)
-    dZ2 = cache["A2"] - E   
+    dZ3 = cache["A3"] - E
+
+    # gradients at last layer (Py2 need 1. to transform to float)
+    dW3 = (1. / m_batch) * np.matmul(dZ3, cache["A2"].T)
+    db3 = (1. / m_batch) * np.sum(dZ3, axis=1, keepdims=True)
+
+    # back propagate through second layer
+    dA2 = np.matmul(params["W3"].T, dZ3)
+    dA2_copy = copy.deepcopy(dA2)
+    dA2_copy[cache["Z2"]<0] = 0 
+    dZ2 = dA2_copy  
 
     # gradients at last layer (Py2 need 1. to transform to float)
     dW2 = (1. / m_batch) * np.matmul(dZ2, cache["A1"].T)
@@ -156,7 +175,7 @@ def back_propagate(X, Y, params, cache, m_batch):
     dW1 = (1. / m_batch) * np.matmul(dZ1, X)
     db1 = (1. / m_batch) * np.sum(dZ1, axis=1, keepdims=True)
 
-    grads = {"dW1": dW1, "db1": db1, "dW2": dW2, "db2": db2}
+    grads = {"dW1": dW1, "db1": db1, "dW2": dW2, "db2": db2, "dW3": dW3, "db3": db3}
     return grads
 
 
@@ -168,8 +187,8 @@ def eval(params, x_data, y_data):
     output: loss and accuracy
     """
     cache = feed_forward(x_data, params)
-    loss = compute_loss(y_data, cache["A2"])
-    result = np.argmax(np.array(cache["A2"]).T,axis=1)
+    loss = compute_loss(y_data, cache["A3"])
+    result = np.argmax(np.array(cache["A3"]).T,axis=1)
     accuracy = sum(result == y_data)/float(len(y_data))
     return loss, accuracy
 
@@ -214,6 +233,8 @@ def trainCentralized(params, hyp, train_dataset,test_dataset):
                 params["b1"] = params["b1"] - learning_rate * params_grads["db1"]
                 params["W2"] = params["W2"] - learning_rate * params_grads["dW2"]
                 params["b2"] = params["b2"] - learning_rate * params_grads["db2"]
+                params["W3"] = params["W3"] - learning_rate * params_grads["dW3"]
+                params["b3"] = params["b3"] - learning_rate * params_grads["db3"]
 
         train_loss, train_accu = eval(params,train_dataset[0],train_dataset[1])
         test_loss, test_accu = eval(params,test_dataset[0],test_dataset[1])                              
@@ -233,16 +254,16 @@ def logvals(plt_name,avg_train_loss_list, avg_train_accu_list, test_loss_list, t
 
     PS: EXISTING FILES WITH THE SAME NAME WILL BE OVERWRITTEN!
     '''
-    with open("./logs/"+plt_name+"train_loss.txt","w") as fp:
+    with open("./logs3/"+plt_name+"train_loss.txt","w") as fp:
         for x in avg_train_loss_list:
             fp.write(str(x)+"\n")
-    with open("./logs/"+plt_name+"train_accu.txt","w") as fp:
+    with open("./logs3/"+plt_name+"train_accu.txt","w") as fp:
         for x in avg_train_accu_list:
             fp.write(str(x)+"\n")
-    with open("./logs/"+plt_name+"test_loss.txt","w") as fp:
+    with open("./logs3/"+plt_name+"test_loss.txt","w") as fp:
         for x in test_loss_list:
             fp.write(str(x)+"\n")
-    with open("./logs/"+plt_name+"test_accu.txt","w") as fp:
+    with open("./logs3/"+plt_name+"test_accu.txt","w") as fp:
         for x in test_accu_list:
             fp.write(str(x)+"\n")  
 
